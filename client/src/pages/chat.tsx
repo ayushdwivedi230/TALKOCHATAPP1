@@ -136,7 +136,9 @@ export default function ChatPage() {
     setLocation('/');
   };
 
-  if (!user) return null;
+  if (!user) {
+    return <div>Loading...</div>;
+  }
 
   const style = {
     "--sidebar-width": "16rem",

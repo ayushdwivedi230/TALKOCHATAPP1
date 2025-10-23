@@ -24,13 +24,15 @@ function ProtectedRoute({ component: Component }: { component: () => JSX.Element
   return isAuthenticated ? <Component /> : <Redirect to="/" />;
 }
 
+function ChatPageWrapper() {
+  return <ProtectedRoute component={ChatPage} />;
+}
+
 function Router() {
   return (
     <Switch>
       <Route path="/" component={AuthPage} />
-      <Route path="/chat">
-        {() => <ProtectedRoute component={ChatPage} />}
-      </Route>
+      <Route path="/chat" component={ChatPageWrapper} />
       <Route>
         <Redirect to="/" />
       </Route>

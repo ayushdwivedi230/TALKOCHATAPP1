@@ -39,14 +39,11 @@ export default function AuthPage() {
   const authMutation = useMutation({
     mutationFn: async (data: z.infer<typeof formSchema>) => {
       const endpoint = mode === 'login' ? '/api/auth/login' : '/api/auth/register';
-      const response = await apiRequest<{ user: User; token: string }>(
-        'POST',
-        endpoint,
-        data
-      );
-      return response;
+      const response = await apiRequest('POST', endpoint, data);
+      const jsonData = await response.json() as { user: User; token: string };
+      return jsonData;
     },
-    onSuccess: (data) => {
+    onSuccess: (data: { user: User; token: string }) => {
       login(data.user, data.token);
       toast({
         title: mode === 'login' ? 'Welcome back!' : 'Account created!',
