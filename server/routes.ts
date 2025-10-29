@@ -111,7 +111,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all messages
+  // Get all users
+  app.get('/api/users', authenticateToken, async (req: any, res) => {
+    try {
+      const users = await storage.getAllUsers(req.userId);
+      
+      // Remove password from user objects
+      const sanitizedUsers = users.map(user => ({
+        id: user.id,
+        username: user.username,
+        createdAt: user.createdAt,
+      }));
+      
+      res.json(sanitizedUsers);
+    } catch (error: any) {
+      console.error('Get users error:', error);
+      res.status(500).json({ 
+        message: error.message || 'Failed to fetch users' 
+      });
+    }
+  });
+
+  // Get all group messages
   app.get('/api/messages', authenticateToken, async (req, res) => {
     try {
       const messages = await storage.getAllMessages();
@@ -135,27 +156,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Send message
+  // Get conversation with a specific user
+  app.get('/api/conversations/:userId', authenticateToken, async (req: any, res) => {
+    try {
+      const otherUserId = parseInt(req.params.userId);
+      if (isNaN(otherUserId)) {
+        return res.status(400).json({ message: 'Invalid user ID' });
+      }
+      
+      const messages = await storage.getConversation(req.userId, otherUserId);
+      
+      // Remove password from sender objects
+      const sanitizedMessages = messages.map(msg => ({
+        ...msg,
+        sender: {
+          id: msg.sender.id,
+          username: msg.sender.username,
+          createdAt: msg.sender.createdAt,
+        }
+      }));
+      
+      res.json(sanitizedMessages);
+    } catch (error: any) {
+      console.error('Get conversation error:', error);
+      res.status(500).json({ 
+        message: error.message || 'Failed to fetch conversation' 
+      });
+    }
+  });
+
+  // Send message (group or direct)
   app.post('/api/messages', authenticateToken, async (req: any, res) => {
     try {
       const data = insertMessageSchema.parse({
         senderId: req.userId,
+        recipientId: req.body.recipientId || null,
         text: req.body.text,
       });
       
       const message = await storage.createMessage(data);
       
-      // Broadcast to all connected WebSocket clients
+      // Get sender info for WebSocket message
+      const sender = await storage.getUser(req.userId);
+      
       const messageData = JSON.stringify({
         type: 'message',
-        message,
+        message: {
+          ...message,
+          sender: {
+            id: sender!.id,
+            username: sender!.username,
+            createdAt: sender!.createdAt,
+          }
+        },
       });
       
-      connectedUsers.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(messageData);
+      if (data.recipientId) {
+        // Direct message - send only to sender and recipient
+        const recipientClient = connectedUsers.get(data.recipientId);
+        const senderClient = connectedUsers.get(req.userId);
+        
+        if (recipientClient && recipientClient.readyState === WebSocket.OPEN) {
+          recipientClient.send(messageData);
         }
-      });
+        
+        if (senderClient && senderClient.readyState === WebSocket.OPEN) {
+          senderClient.send(messageData);
+        }
+      } else {
+        // Group message - broadcast to all connected clients
+        connectedUsers.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(messageData);
+          }
+        });
+      }
       
       res.status(201).json(message);
     } catch (error: any) {
