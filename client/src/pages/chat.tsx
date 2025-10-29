@@ -33,6 +33,8 @@ export default function ChatPage() {
   const [darkMode, setDarkMode] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [chatMode, setChatMode] = useState<'group' | 'dm'>('group');
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
 
   // Toggle dark mode
   useEffect(() => {
@@ -50,9 +52,21 @@ export default function ChatPage() {
     }
   }, [user, setLocation]);
 
-  // Fetch messages
+  // Fetch all users
+  const { data: allUsers = [] } = useQuery<User[]>({
+    queryKey: ['/api/users'],
+    enabled: !!user,
+    refetchInterval: false,
+  });
+
+  // Fetch messages (group or DM based on mode)
+  const queryKey = chatMode === 'group' 
+    ? ['/api/messages']
+    : ['/api/conversations', selectedUserId];
+    
   const { data: messages = [], isLoading } = useQuery<MessageWithSender[]>({
-    queryKey: ['/api/messages'],
+    queryKey,
+    enabled: chatMode === 'group' || selectedUserId !== null,
     refetchInterval: false,
   });
 
@@ -77,7 +91,20 @@ export default function ChatPage() {
       const data = JSON.parse(event.data);
       
       if (data.type === 'message') {
-        queryClient.invalidateQueries({ queryKey: ['/api/messages'] });
+        const receivedMessage = data.message;
+        
+        // Invalidate group messages if it's a group message
+        if (!receivedMessage.recipientId) {
+          queryClient.invalidateQueries({ queryKey: ['/api/messages'] });
+        } else {
+          // Invalidate conversation queries for both sender and recipient
+          queryClient.invalidateQueries({ 
+            queryKey: ['/api/conversations', receivedMessage.senderId] 
+          });
+          queryClient.invalidateQueries({ 
+            queryKey: ['/api/conversations', receivedMessage.recipientId] 
+          });
+        }
       } else if (data.type === 'online_users') {
         setOnlineUsers(data.users);
       }
@@ -110,11 +137,19 @@ export default function ChatPage() {
 
   const sendMessageMutation = useMutation({
     mutationFn: async (text: string) => {
-      return apiRequest('POST', '/api/messages', { text });
+      const payload: { text: string; recipientId?: number } = { text };
+      if (chatMode === 'dm' && selectedUserId) {
+        payload.recipientId = selectedUserId;
+      }
+      return apiRequest('POST', '/api/messages', payload);
     },
     onSuccess: () => {
       setMessage('');
-      queryClient.invalidateQueries({ queryKey: ['/api/messages'] });
+      if (chatMode === 'group') {
+        queryClient.invalidateQueries({ queryKey: ['/api/messages'] });
+      } else if (selectedUserId) {
+        queryClient.invalidateQueries({ queryKey: ['/api/conversations', selectedUserId] });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -152,33 +187,77 @@ export default function ChatPage() {
           <SidebarContent>
             <SidebarGroup>
               <SidebarGroupLabel className="flex items-center gap-2 px-4">
-                <Users className="w-4 h-4 text-primary" />
-                Online Users
+                <MessageCircle className="w-4 h-4 text-primary" />
+                Chats
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {onlineUsers.length === 0 ? (
+                  {/* Group Chat */}
+                  <SidebarMenuItem>
+                    <SidebarMenuButton 
+                      className={`h-auto py-3 ${chatMode === 'group' ? 'bg-sidebar-accent' : ''}`}
+                      onClick={() => {
+                        setChatMode('group');
+                        setSelectedUserId(null);
+                      }}
+                      data-testid="chat-group"
+                    >
+                      <div className="flex items-center gap-3 w-full">
+                        <div className="w-8 h-8 rounded-full bg-primary flex items-center justify-center flex-shrink-0">
+                          <Users className="w-4 h-4 text-primary-foreground" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">
+                            Group Chat
+                          </p>
+                        </div>
+                      </div>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+
+            <SidebarGroup>
+              <SidebarGroupLabel className="flex items-center gap-2 px-4">
+                <Users className="w-4 h-4 text-primary" />
+                Direct Messages
+              </SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {allUsers.length === 0 ? (
                     <div className="px-4 py-8 text-center">
-                      <p className="text-sm text-muted-foreground">No users online</p>
+                      <p className="text-sm text-muted-foreground">No users available</p>
                     </div>
                   ) : (
-                    onlineUsers.map((onlineUser) => (
-                      <SidebarMenuItem key={onlineUser.id}>
-                        <SidebarMenuButton className="h-auto py-3">
-                          <div className="flex items-center gap-3 w-full" data-testid={`user-${onlineUser.username}`}>
-                            <Avatar username={onlineUser.username} size="sm" online={true} />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate">
-                                {onlineUser.username}
-                                {onlineUser.id === user.id && (
-                                  <span className="text-xs text-muted-foreground ml-1">(you)</span>
-                                )}
-                              </p>
-                            </div>
-                          </div>
-                        </SidebarMenuButton>
-                      </SidebarMenuItem>
-                    ))
+                    allUsers
+                      .filter(u => u.id !== user.id)
+                      .map((otherUser) => {
+                        const isOnline = onlineUsers.some(u => u.id === otherUser.id);
+                        const isSelected = chatMode === 'dm' && selectedUserId === otherUser.id;
+                        
+                        return (
+                          <SidebarMenuItem key={otherUser.id}>
+                            <SidebarMenuButton 
+                              className={`h-auto py-3 ${isSelected ? 'bg-sidebar-accent' : ''}`}
+                              onClick={() => {
+                                setChatMode('dm');
+                                setSelectedUserId(otherUser.id);
+                              }}
+                              data-testid={`user-${otherUser.username}`}
+                            >
+                              <div className="flex items-center gap-3 w-full">
+                                <Avatar username={otherUser.username} size="sm" online={isOnline} />
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate">
+                                    {otherUser.username}
+                                  </p>
+                                </div>
+                              </div>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })
                   )}
                 </SidebarMenu>
               </SidebarGroupContent>
@@ -191,13 +270,31 @@ export default function ChatPage() {
           {/* Header */}
           <header className="h-16 border-b border-border px-6 flex items-center justify-between bg-card">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
-                <MessageCircle className="w-6 h-6 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="text-lg font-semibold">Talko</h1>
-                <p className="text-xs text-muted-foreground">Welcome, {user.username}</p>
-              </div>
+              {chatMode === 'group' ? (
+                <>
+                  <div className="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                    <Users className="w-6 h-6 text-primary-foreground" />
+                  </div>
+                  <div>
+                    <h1 className="text-lg font-semibold">Group Chat</h1>
+                    <p className="text-xs text-muted-foreground">{onlineUsers.length} online</p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {selectedUserId && allUsers.find(u => u.id === selectedUserId) && (
+                    <>
+                      <Avatar username={allUsers.find(u => u.id === selectedUserId)!.username} size="md" online={onlineUsers.some(u => u.id === selectedUserId)} />
+                      <div>
+                        <h1 className="text-lg font-semibold">{allUsers.find(u => u.id === selectedUserId)!.username}</h1>
+                        <p className="text-xs text-muted-foreground">
+                          {onlineUsers.some(u => u.id === selectedUserId) ? 'Online' : 'Offline'}
+                        </p>
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button
