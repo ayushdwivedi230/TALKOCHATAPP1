@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, serial, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
@@ -13,7 +13,8 @@ export const users = pgTable("users", {
 
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
-  senderId: serial("sender_id").notNull().references(() => users.id),
+  senderId: integer("sender_id").notNull().references(() => users.id),
+  recipientId: integer("recipient_id").references(() => users.id),
   text: text("text").notNull(),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
 });
@@ -26,6 +27,10 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const messagesRelations = relations(messages, ({ one }) => ({
   sender: one(users, {
     fields: [messages.senderId],
+    references: [users.id],
+  }),
+  recipient: one(users, {
+    fields: [messages.recipientId],
     references: [users.id],
   }),
 }));
