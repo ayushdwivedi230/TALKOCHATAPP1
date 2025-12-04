@@ -1,0 +1,51 @@
+ # Node
+ node_modules/
+ dist/
+ 
+ # Env files
+ .env
+ 
+ # Logs
+ *.log
+ npm-debug.log*
+ yarn-debug.log*
+ yarn-error.log*
+ server_log.txt
+ server_err.txt
+ 
+ # OS files
+ .DS_Store
+ Thumbs.db
+ desktop.ini
+ 
+ # IDEs
+ .vscode/
+ .idea/
+ 
+ # Dev artifacts and temporary files
+ .cache/
+ .parcel-cache/
+ 
+ # Keys and certificates
+ *.pem
+ *.key
+ *.crt
+ 
+ # Archives and installers (avoid committing large binaries by accident)
+ *.zip
+ *.tar.gz
+ *.exe
+ *.iso
+ 
+ # Optional: build artifacts
+ npm-debug.log
+ yarn-error.log
+node_modules
+dist
+.DS_Store
+server/public
+vite.config.ts.*
+*.tar.gz
+.local/
+.local/state/
+.env
