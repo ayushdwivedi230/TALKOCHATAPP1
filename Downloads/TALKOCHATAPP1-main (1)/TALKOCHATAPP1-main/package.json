@@ -7,8 +7,8 @@
   "dev": "vite",
   "init-db": "tsx server/init_db.ts",
   "seed-user": "tsx server/seed_user.ts",
-  "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
-  "start": "NODE_ENV=production node dist/index.js"
+    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist && tsx server/init-db-prod.ts",
+    "start": "NODE_ENV=production node dist/index.js"
 },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
