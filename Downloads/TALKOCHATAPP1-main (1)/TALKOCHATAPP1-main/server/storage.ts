@@ -1,14 +1,9 @@
 // Storage interface and implementation - referenced from javascript_database blueprint
 import { users, messages, type User, type InsertUser, type Message, type InsertMessage, type MessageWithSender } from "@shared/schema";
-let db: any = undefined;
-try {
-  // only import the real db when available
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  db = require('./db').db;
-} catch (e) {
-  db = undefined;
-}
 import { eq, desc, or, and, isNull, ne } from "drizzle-orm";
+
+// In production with DATABASE_URL, the db module is imported in server/routes.ts or elsewhere
+// For local dev without DATABASE_URL, we use MockStorage (defined below)
 
 export interface IStorage {
   // User operations
@@ -24,18 +19,20 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  constructor(private dbInstance: any) {}
+
   async getUser(id: number): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.id, id));
+    const [user] = await this.dbInstance.select().from(users).where(eq(users.id, id));
     return user || undefined;
   }
 
   async getUserByUsername(username: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.username, username));
+    const [user] = await this.dbInstance.select().from(users).where(eq(users.username, username));
     return user || undefined;
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
-    const [user] = await db
+    const [user] = await this.dbInstance
       .insert(users)
       .values(insertUser)
       .returning();
@@ -44,13 +41,13 @@ export class DatabaseStorage implements IStorage {
 
   async getAllUsers(excludeUserId?: number): Promise<User[]> {
     if (excludeUserId) {
-      return await db.select().from(users).where(ne(users.id, excludeUserId));
+      return await this.dbInstance.select().from(users).where(ne(users.id, excludeUserId));
     }
-    return await db.select().from(users);
+    return await this.dbInstance.select().from(users);
   }
 
   async getAllMessages(): Promise<MessageWithSender[]> {
-    const result = await db
+    const result = await this.dbInstance
       .select({
         id: messages.id,
         senderId: messages.senderId,
@@ -68,7 +65,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getConversation(userId1: number, userId2: number): Promise<MessageWithSender[]> {
-    const result = await db
+    const result = await this.dbInstance
       .select({
         id: messages.id,
         senderId: messages.senderId,
@@ -91,7 +88,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
-    const [message] = await db
+    const [message] = await this.dbInstance
       .insert(messages)
       .values(insertMessage)
       .returning();
@@ -161,4 +158,4 @@ class MockStorage implements IStorage {
   }
 }
 
-export const storage = process.env.DATABASE_URL ? new DatabaseStorage() : new MockStorage();
+export const storage = new MockStorage();
