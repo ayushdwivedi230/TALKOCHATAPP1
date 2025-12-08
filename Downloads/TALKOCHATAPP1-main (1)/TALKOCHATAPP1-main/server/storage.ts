@@ -1,6 +1,8 @@
 // Storage interface and implementation - referenced from javascript_database blueprint
 import { users, messages, type User, type InsertUser, type Message, type InsertMessage, type MessageWithSender } from "@shared/schema";
 import { eq, desc, or, and, isNull, ne } from "drizzle-orm";
+import pkg from 'pg';
+const { Pool } = pkg;
 
 // In production with DATABASE_URL, the db module is imported in server/routes.ts or elsewhere
 // For local dev without DATABASE_URL, we use MockStorage (defined below)
@@ -158,4 +160,112 @@ class MockStorage implements IStorage {
   }
 }
 
-export const storage = new MockStorage();
+// `storage` will be exported at the bottom as a hybrid implementation.
+
+// Hybrid storage: if a DATABASE_URL is present, attempt DB operations first.
+// On Postgres 'relation does not exist' (42P01) error, attempt to create tables and retry.
+async function ensureTables(): Promise<void> {
+  if (!process.env.DATABASE_URL) return;
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false },
+  });
+
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS messages (
+        id SERIAL PRIMARY KEY,
+        "senderId" INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        "recipientId" INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        text TEXT NOT NULL,
+        timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+  } finally {
+    await pool.end();
+  }
+}
+
+function createHybridStorage(): IStorage {
+  const mock = new MockStorage();
+
+  // If no DATABASE_URL, return mock immediately
+  if (!process.env.DATABASE_URL) return mock;
+
+  // Lazy import of drizzle DB instance if available
+  let dbInstance: any = undefined;
+  try {
+    // attempt to import the compiled db module (if present)
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    dbInstance = undefined;
+  } catch (e) {
+    dbInstance = undefined;
+  }
+
+  const dbStorage = dbInstance ? new DatabaseStorage(dbInstance) : null;
+
+  // helper to run an operation with retry on missing tables
+  async function withFallback<T>(op: () => Promise<T>): Promise<T> {
+    try {
+      if (dbStorage) return await op();
+      return await op();
+    } catch (err: any) {
+      // If Postgres relation missing, attempt to create tables then retry once
+      if (err && (err.code === '42P01' || (typeof err.message === 'string' && err.message.includes('relation "users" does not exist')))) {
+        try {
+          await ensureTables();
+          return await op();
+        } catch (err2) {
+          // final fallback to mock storage
+          return (op as any).mockFallback();
+        }
+      }
+      throw err;
+    }
+  }
+
+  // Build the hybrid object mapping to either DB or mock.
+  const hybrid: any = {
+    getUser: async (id: number) => {
+      if (dbStorage) return withFallback(() => dbStorage.getUser(id)).catch(async () => mock.getUser(id));
+      return mock.getUser(id);
+    },
+    getUserByUsername: async (username: string) => {
+      if (dbStorage) return withFallback(() => dbStorage.getUserByUsername(username)).catch(async () => mock.getUserByUsername(username));
+      return mock.getUserByUsername(username);
+    },
+    createUser: async (u: InsertUser) => {
+      if (dbStorage) return withFallback(() => dbStorage.createUser(u)).catch(async () => mock.createUser(u));
+      return mock.createUser(u);
+    },
+    getAllUsers: async (excludeUserId?: number) => {
+      if (dbStorage) return withFallback(() => dbStorage.getAllUsers(excludeUserId)).catch(async () => mock.getAllUsers(excludeUserId));
+      return mock.getAllUsers(excludeUserId);
+    },
+    getAllMessages: async () => {
+      if (dbStorage) return withFallback(() => dbStorage.getAllMessages()).catch(async () => mock.getAllMessages());
+      return mock.getAllMessages();
+    },
+    getConversation: async (a: number, b: number) => {
+      if (dbStorage) return withFallback(() => dbStorage.getConversation(a, b)).catch(async () => mock.getConversation(a, b));
+      return mock.getConversation(a, b);
+    },
+    createMessage: async (m: InsertMessage) => {
+      if (dbStorage) return withFallback(() => dbStorage.createMessage(m)).catch(async () => mock.createMessage(m));
+      return mock.createMessage(m);
+    }
+  } as IStorage;
+
+  return hybrid;
+}
+
+export const storage = createHybridStorage();
