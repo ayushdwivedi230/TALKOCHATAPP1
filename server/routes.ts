@@ -95,7 +95,8 @@ export async function registerRoutes(app: Express) {
       // Validate input
       const validation = loginSchema.safeParse({ username, password });
       if (!validation.success) {
-        return res.status(400).json({ message: validation.error.errors[0].message });
+        const message = validation.error.issues[0]?.message || "Validation failed";
+        return res.status(400).json({ message });
       }
 
       // Find user

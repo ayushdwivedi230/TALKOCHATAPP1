@@ -3,6 +3,7 @@ import fs from "fs";
 import path from "path";
 import { createServer as createViteServer, createLogger } from "vite";
 import { type Server } from "http";
+// @ts-ignore - vite config is frontend-only, skip during server build
 import viteConfig from "../vite.config";
 import { nanoid } from "nanoid";
 
