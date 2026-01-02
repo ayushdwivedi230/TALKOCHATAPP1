@@ -1,14 +1,10 @@
-import { defineConfig } from "drizzle-kit";
-import dotenv from "dotenv";
+import type { Config } from "drizzle-kit";
 
-// Ensure .env values override any existing environment variables when running locally
-dotenv.config({ override: true });
-
-export default defineConfig({
-  schema: "./shared/schema.ts",
-  out: "./drizzle",
-  dialect: "postgresql",
+export default {
+  schema: "./drizzle/schema.ts",
+  out: "./drizzle/migrations",
+  driver: "pg",
   dbCredentials: {
-    url: process.env.DATABASE_URL!,
+    connectionString: process.env.DATABASE_URL!,
   },
-});
+} satisfies Config;

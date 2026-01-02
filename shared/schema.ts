@@ -9,6 +9,7 @@ export const users = pgTable("users", {
   username: varchar("username", { length: 50 }).notNull().unique(),
   password: text("password").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+  lastSeen: timestamp("last_seen").defaultNow().notNull(),
 });
 
 export const messages = pgTable("messages", {

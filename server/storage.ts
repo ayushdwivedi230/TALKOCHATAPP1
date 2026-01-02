@@ -9,6 +9,7 @@ export interface IStorage {
   getUserByUsername(username: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   getAllUsers(excludeUserId?: number): Promise<User[]>;
+  updateLastSeen(userId: number): Promise<void>;
   
   // Message operations
   getAllMessages(): Promise<MessageWithSender[]>;
@@ -40,6 +41,13 @@ export class DatabaseStorage implements IStorage {
       return await db.select().from(users).where(ne(users.id, excludeUserId));
     }
     return await db.select().from(users);
+  }
+
+  async updateLastSeen(userId: number): Promise<void> {
+    await db
+      .update(users)
+      .set({ lastSeen: new Date() })
+      .where(eq(users.id, userId));
   }
 
   async getAllMessages(): Promise<MessageWithSender[]> {
