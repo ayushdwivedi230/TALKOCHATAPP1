@@ -15,5 +15,5 @@
     }
   },
   "include": ["server/**/*.ts", "shared/**/*.ts"],
-  "exclude": ["node_modules", "dist", "client/**/*", "server/vite.ts"]
+  "exclude": ["node_modules", "dist", "**/*.test.ts", "client/**/*", "server/vite.ts"]
 }
