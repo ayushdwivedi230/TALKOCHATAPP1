@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "description": "Backend for Talko Chat App using Node.js, Express, Drizzle ORM, and PostgreSQL",
   "main": "dist/index.js",
-  "type": "module",
   "scripts": {
     "dev": "nodemon src/index.ts",
     "build": "tsc",

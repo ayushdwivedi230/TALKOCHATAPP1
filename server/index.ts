@@ -1,6 +1,15 @@
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
+
+function log(message: string, source = "express") {
+  const formattedTime = new Date().toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true,
+  });
+  console.log(`${formattedTime} [${source}] ${message}`);
+}
 
 const app = express();
 
@@ -61,9 +70,19 @@ app.use((req, res, next) => {
   // setting up all the other routes so the catch-all route
   // doesn't interfere with the other routes
   if (app.get("env") === "development") {
+    // Dynamically import vite only in development
+    const { setupVite } = await import("./vite.js");
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    // Serve static files in production (from dist/public)
+    // Note: In production, the frontend build should be served from dist/public
+    const fs = await import("fs");
+    const path = await import("path");
+    const distPath = path.resolve("dist", "public");
+    if (fs.existsSync(distPath)) {
+      const expressModule = await import("express");
+      app.use(expressModule.static(distPath));
+    }
   }
 
   // ALWAYS serve the app on the port specified in the environment variable PORT
