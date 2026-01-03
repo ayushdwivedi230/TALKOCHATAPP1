@@ -36,15 +36,16 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   }),
 }));
 
-// Insert schemas
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
+// Insert schemas  
+export const insertUserSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
 });
 
-export const insertMessageSchema = createInsertSchema(messages).omit({
-  id: true,
-  timestamp: true,
+export const insertMessageSchema = z.object({
+  senderId: z.number(),
+  recipientId: z.number().nullable().optional(),
+  text: z.string().min(1, "Message text is required"),
 });
 
 // Login schema

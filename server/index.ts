@@ -1,6 +1,9 @@
-import express, { type Request, Response, NextFunction } from "express";
+import express from "express";
+import cors from "cors";
+import type { Request } from "express";
 import { registerRoutes } from "./routes";
 
+/* ------------------ Logger ------------------ */
 function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",
@@ -11,90 +14,34 @@ function log(message: string, source = "express") {
   console.log(`${formattedTime} [${source}] ${message}`);
 }
 
+/* ------------------ App ------------------ */
 const app = express();
 
-declare module 'http' {
-  interface IncomingMessage {
-    rawBody: unknown
+/* ------------------ Raw body support ------------------ */
+declare global {
+  namespace Express {
+    interface Request {
+      rawBody?: Buffer;
+    }
   }
 }
-app.use(express.json({
-  verify: (req, _res, buf) => {
-    req.rawBody = buf;
-  }
-}));
-app.use(express.urlencoded({ extended: false }));
 
-app.use((req, res, next) => {
-  const start = Date.now();
-  const path = req.path;
-  let capturedJsonResponse: Record<string, any> | undefined = undefined;
+app.use(
+  express.json({
+    verify: (req: Request, _res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 
-  const originalResJson = res.json;
-  res.json = function (bodyJson, ...args) {
-    capturedJsonResponse = bodyJson;
-    return originalResJson.apply(res, [bodyJson, ...args]);
-  };
+app.use(cors());
 
-  res.on("finish", () => {
-    const duration = Date.now() - start;
-    if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
-      }
+/* ------------------ Routes ------------------ */
+registerRoutes(app);
 
-      if (logLine.length > 80) {
-        logLine = logLine.slice(0, 79) + "…";
-      }
+/* ------------------ Start Server ------------------ */
+const PORT = Number(process.env.PORT) || 10000;
 
-      log(logLine);
-    }
-  });
-
-  next();
+app.listen(PORT, "0.0.0.0", () => {
+  log(`Server running on port ${PORT}`);
 });
-
-(async () => {
-  const server = await registerRoutes(app);
-
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
-
-  // importantly only setup vite in development and after
-  // setting up all the other routes so the catch-all route
-  // doesn't interfere with the other routes
-  if (app.get("env") === "development") {
-    // Dynamically import vite only in development
-    const { setupVite } = await import("./vite.js");
-    await setupVite(app, server);
-  } else {
-    // Serve static files in production (from dist/public)
-    // Note: In production, the frontend build should be served from dist/public
-    const fs = await import("fs");
-    const path = await import("path");
-    const distPath = path.resolve("dist", "public");
-    if (fs.existsSync(distPath)) {
-      const expressModule = await import("express");
-      app.use(expressModule.static(distPath));
-    }
-  }
-
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
-  const port = parseInt(process.env.PORT || '5000', 10);
-  server.listen({
-    port,
-    host: "0.0.0.0",
-    reusePort: true,
-  }, () => {
-    log(`serving on port ${port}`);
-  });
-})();
