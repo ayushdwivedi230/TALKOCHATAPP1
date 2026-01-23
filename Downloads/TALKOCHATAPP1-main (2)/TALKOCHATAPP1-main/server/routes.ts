@@ -1,338 +1,293 @@
-// API routes and WebSocket server - referenced from javascript_websocket blueprint
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { WebSocketServer, WebSocket } from "ws";
-import { storage } from "./storage";
-import bcrypt from "bcrypt";
+import type { Express, Request, Response } from "express";
+import { createServer } from "http";
+import { WebSocketServer } from "ws";
 import jwt from "jsonwebtoken";
-import { insertUserSchema, loginSchema, insertMessageSchema, type User } from "@shared/schema";
+import bcrypt from "bcryptjs";
+import { storage } from "./storage";
+import { loginSchema, insertUserSchema } from "@shared/schema";
+import type { User } from "@shared/schema";
 
-const JWT_SECRET = process.env.JWT_SECRET || "talko-secret-key-change-in-production";
-const SALT_ROUNDS = 10;
-
-// WebSocket client interface
-interface WSClient extends WebSocket {
-  userId?: number;
-  username?: string;
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: number;
+    }
+  }
 }
 
-// Connected users map
-const connectedUsers = new Map<number, WSClient>();
+const JWT_SECRET = process.env.JWT_SECRET || "your-secret-key-change-in-production";
 
-export async function registerRoutes(app: Express): Promise<Server> {
-  // Authentication middleware
-  const authenticateToken = (req: any, res: any, next: any) => {
-    const authHeader = req.headers['authorization'];
-    const token = authHeader && authHeader.split(' ')[1];
+// Middleware to verify JWT token
+function authenticateToken(req: Request, res: Response, next: Function) {
+  const authHeader = req.headers["authorization"];
+  const token = authHeader && authHeader.split(" ")[1];
 
-    if (!token) {
-      return res.status(401).json({ message: 'Authentication required' });
-    }
+  if (!token) {
+    return res.status(401).json({ message: "Access token required" });
+  }
 
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
+    req.userId = decoded.userId;
+    next();
+  } catch (err) {
+    res.status(403).json({ message: "Invalid or expired token" });
+  }
+}
+
+export async function registerRoutes(app: Express) {
+  const httpServer = createServer(app);
+  const wss = new WebSocketServer({ server: httpServer, path: "/ws" });
+
+  // Track connected WebSocket clients
+  const clients = new Map<number, Set<any>>();
+
+  // Auth Routes
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
-      req.userId = decoded.userId;
-      next();
-    } catch (error) {
-      return res.status(403).json({ message: 'Invalid or expired token' });
-    }
-  };
+      const { username, password } = req.body;
 
-  // Register endpoint
-  app.post('/api/auth/register', async (req, res) => {
-    try {
-      const data = insertUserSchema.parse(req.body);
-      
-      // Check if username already exists
-      const existingUser = await storage.getUserByUsername(data.username);
+      // Validate input
+      if (!username || !password) {
+        return res.status(400).json({ message: "Username and password required" });
+      }
+
+      if (username.length < 3) {
+        return res.status(400).json({ message: "Username must be at least 3 characters" });
+      }
+
+      if (password.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      // Check if user exists
+      const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
-        return res.status(400).json({ message: 'Username already taken' });
+        return res.status(400).json({ message: "Username already taken" });
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(data.password, SALT_ROUNDS);
-      
+      const hashedPassword = await bcrypt.hash(password, 10);
+
       // Create user
       const user = await storage.createUser({
-        username: data.username,
+        username,
         password: hashedPassword,
       });
 
-      // Generate JWT token
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+      // Generate token
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
 
-      // Don't send password hash to client
-      const { password, ...userWithoutPassword } = user;
-
-      res.status(201).json({ 
-        user: userWithoutPassword, 
-        token 
+      res.json({
+        user: { id: user.id, username: user.username, lastSeen: user.lastSeen },
+        token,
       });
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      res.status(400).json({ 
-        message: error.message || 'Registration failed' 
-      });
+    } catch (error) {
+      console.error("Registration error:", error);
+      res.status(500).json({ message: "Registration failed" });
     }
   });
 
-  // Login endpoint
-  app.post('/api/auth/login', async (req, res) => {
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
-      const data = loginSchema.parse(req.body);
-      
+      const { username, password } = req.body;
+
+      // Validate input
+      const validation = loginSchema.safeParse({ username, password });
+      if (!validation.success) {
+        const message = validation.error.issues[0]?.message || "Validation failed";
+        return res.status(400).json({ message });
+      }
+
       // Find user
-      const user = await storage.getUserByUsername(data.username);
+      const user = await storage.getUserByUsername(username);
       if (!user) {
-        return res.status(401).json({ message: 'Invalid username or password' });
+        return res.status(401).json({ message: "Invalid username or password" });
       }
 
       // Verify password
-      const passwordMatch = await bcrypt.compare(data.password, user.password);
+      const passwordMatch = await bcrypt.compare(password, user.password);
       if (!passwordMatch) {
-        return res.status(401).json({ message: 'Invalid username or password' });
+        return res.status(401).json({ message: "Invalid username or password" });
       }
 
-      // Generate JWT token
-      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '7d' });
+      // Update last_seen on successful login
+      await storage.updateLastSeen(user.id);
 
-      // Don't send password hash to client
-      const { password, ...userWithoutPassword } = user;
+      // Generate token
+      const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
 
-      res.json({ 
-        user: userWithoutPassword, 
-        token 
+      // Fetch updated user with latest lastSeen
+      const updatedUser = await storage.getUser(user.id);
+
+      res.json({
+        user: { id: updatedUser!.id, username: updatedUser!.username, lastSeen: updatedUser!.lastSeen },
+        token,
       });
-    } catch (error: any) {
-      console.error('Login error:', error);
-      res.status(400).json({ 
-        message: error.message || 'Login failed' 
-      });
+    } catch (error) {
+      console.error("Login error:", error);
+      res.status(500).json({ message: "Login failed" });
     }
   });
 
   // Get all users
-  app.get('/api/users', authenticateToken, async (req: any, res) => {
+  app.get("/api/users", authenticateToken, async (req: Request, res: Response) => {
     try {
       const users = await storage.getAllUsers(req.userId);
-      
-      // Remove password from user objects
-      const sanitizedUsers = users.map(user => ({
-        id: user.id,
-        username: user.username,
-        createdAt: user.createdAt,
-      }));
-      
-      res.json(sanitizedUsers);
-    } catch (error: any) {
-      console.error('Get users error:', error);
-      res.status(500).json({ 
-        message: error.message || 'Failed to fetch users' 
-      });
+      res.json(users);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
     }
   });
 
-  // Get all group messages
-  app.get('/api/messages', authenticateToken, async (req, res) => {
+  // Get current user
+  app.get("/api/user", authenticateToken, async (req: Request, res: Response) => {
+    try {
+      const user = await storage.getUser(req.userId!);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
+
+  // Message Routes
+  app.get("/api/messages", authenticateToken, async (req: Request, res: Response) => {
     try {
       const messages = await storage.getAllMessages();
-      
-      // Remove password from sender objects
-      const sanitizedMessages = messages.map(msg => ({
-        ...msg,
-        sender: {
-          id: msg.sender.id,
-          username: msg.sender.username,
-          createdAt: msg.sender.createdAt,
-        }
-      }));
-      
-      res.json(sanitizedMessages);
-    } catch (error: any) {
-      console.error('Get messages error:', error);
-      res.status(500).json({ 
-        message: error.message || 'Failed to fetch messages' 
-      });
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ message: "Failed to fetch messages" });
     }
   });
 
-  // Get conversation with a specific user
-  app.get('/api/conversations/:userId', authenticateToken, async (req: any, res) => {
+  app.post("/api/messages", authenticateToken, async (req: Request, res: Response) => {
     try {
-      const otherUserId = parseInt(req.params.userId);
-      if (isNaN(otherUserId)) {
-        return res.status(400).json({ message: 'Invalid user ID' });
+      const { text, recipientId } = req.body;
+
+      if (!text || text.trim().length === 0) {
+        return res.status(400).json({ message: "Message text cannot be empty" });
       }
-      
-      const messages = await storage.getConversation(req.userId, otherUserId);
-      
-      // Remove password from sender objects
-      const sanitizedMessages = messages.map(msg => ({
-        ...msg,
-        sender: {
-          id: msg.sender.id,
-          username: msg.sender.username,
-          createdAt: msg.sender.createdAt,
-        }
-      }));
-      
-      res.json(sanitizedMessages);
-    } catch (error: any) {
-      console.error('Get conversation error:', error);
-      res.status(500).json({ 
-        message: error.message || 'Failed to fetch conversation' 
+
+      const message = await storage.createMessage({
+        senderId: req.userId!,
+        recipientId: recipientId || null,
+        text,
       });
+
+      // Update sender's last_seen after message send
+      await storage.updateLastSeen(req.userId!);
+
+      // Broadcast message to connected clients
+      const messageWithSender = {
+        ...message,
+        sender: await storage.getUser(req.userId!),
+      };
+
+      broadcastMessage("message", messageWithSender);
+      res.json(message);
+    } catch (error) {
+      console.error("Error creating message:", error);
+      res.status(500).json({ message: "Failed to create message" });
     }
   });
 
-  // Send message (group or direct)
-  app.post('/api/messages', authenticateToken, async (req: any, res) => {
-    try {
-      const data = insertMessageSchema.parse({
-        senderId: req.userId,
-        recipientId: req.body.recipientId || null,
-        text: req.body.text,
-      });
-      
-      const message = await storage.createMessage(data);
-      
-      // Get sender info for WebSocket message
-      const sender = await storage.getUser(req.userId);
-      
-      const messageData = JSON.stringify({
-        type: 'message',
-        message: {
-          ...message,
-          sender: {
-            id: sender!.id,
-            username: sender!.username,
-            createdAt: sender!.createdAt,
-          }
-        },
-      });
-      
-      if (data.recipientId) {
-        // Direct message - send only to sender and recipient
-        const recipientClient = connectedUsers.get(data.recipientId);
-        const senderClient = connectedUsers.get(req.userId);
-        
-        if (recipientClient && recipientClient.readyState === WebSocket.OPEN) {
-          recipientClient.send(messageData);
+  // WebSocket server for real-time messaging
+  wss.on("connection", (ws, req) => {
+    console.log("New WebSocket connection");
+
+    // Get userId from query or token
+    const url = new URL(req.url || "", `http://${req.headers.host}`);
+    const token = url.searchParams.get("token");
+
+    let userId: number | null = null;
+
+    if (token) {
+      try {
+        const decoded = jwt.verify(token, JWT_SECRET) as { userId: number };
+        userId = decoded.userId;
+
+        if (!clients.has(userId)) {
+          clients.set(userId, new Set());
         }
-        
-        if (senderClient && senderClient.readyState === WebSocket.OPEN) {
-          senderClient.send(messageData);
-        }
-      } else {
-        // Group message - broadcast to all connected clients
-        connectedUsers.forEach((client) => {
-          if (client.readyState === WebSocket.OPEN) {
-            client.send(messageData);
+        clients.get(userId)!.add(ws);
+
+        // Broadcast online status
+        broadcastMessage("userOnline", { userId });
+
+        ws.on("message", async (data) => {
+          try {
+            const message = JSON.parse(data.toString());
+
+            if (message.type === "message") {
+              const savedMessage = await storage.createMessage({
+                senderId: userId!,
+                recipientId: message.recipientId || null,
+                text: message.text,
+              });
+
+              // Update sender's last_seen on message
+              await storage.updateLastSeen(userId!);
+
+              const messageWithSender = {
+                ...savedMessage,
+                sender: await storage.getUser(userId!),
+              };
+
+              broadcastMessage("message", messageWithSender);
+
+            }
+
+            // Typing indicators (real-time only, no DB)
+            else if (message.type === "typing" || message.type === "stop_typing") {
+              const recipientId = message.recipientId || message.toUserId;
+              if (recipientId && clients.has(recipientId)) {
+                const payloadType = message.type === "typing" ? "typing" : "stop_typing";
+                const recipientSet = clients.get(recipientId)!;
+                const payload = JSON.stringify({ type: payloadType, fromUserId: userId });
+                recipientSet.forEach((clientWs) => {
+                  try {
+                    if (clientWs.readyState === 1) clientWs.send(payload);
+                  } catch (err) {
+                    console.error('Failed to send typing event', err);
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            console.error("WebSocket message error:", error);
           }
         });
+
+        ws.on("close", () => {
+          const clientSet = clients.get(userId!);
+          if (clientSet) {
+            clientSet.delete(ws);
+            if (clientSet.size === 0) {
+              clients.delete(userId!);
+              broadcastMessage("userOffline", { userId });
+            }
+          }
+        });
+      } catch (error) {
+        console.error("WebSocket auth error:", error);
+        ws.close();
       }
-      
-      res.status(201).json(message);
-    } catch (error: any) {
-      console.error('Send message error:', error);
-      res.status(400).json({ 
-        message: error.message || 'Failed to send message' 
-      });
+    } else {
+      ws.close();
     }
   });
 
-  const httpServer = createServer(app);
-
-  // WebSocket server setup - referenced from javascript_websocket blueprint
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
-
-  const broadcastOnlineUsers = () => {
-    const onlineUsers = Array.from(connectedUsers.values())
-      .filter(client => client.userId && client.username)
-      .map(client => ({
-        id: client.userId!,
-        username: client.username!,
-      }));
-
-    const message = JSON.stringify({
-      type: 'online_users',
-      users: onlineUsers,
-    });
-
-    connectedUsers.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
+  function broadcastMessage(type: string, data: any) {
+    const message = JSON.stringify({ type, data });
+    wss.clients.forEach((client) => {
+      if (client.readyState === 1) { // OPEN
         client.send(message);
       }
     });
-  };
-
-  wss.on('connection', (ws: WSClient) => {
-    console.log('WebSocket client connected');
-
-    ws.on('message', async (data) => {
-      try {
-        const message = JSON.parse(data.toString());
-        
-        if (message.type === 'auth' && message.token) {
-          // Verify JWT token
-          try {
-            const decoded = jwt.verify(message.token, JWT_SECRET) as { userId: number };
-            const user = await storage.getUser(decoded.userId);
-            
-            if (user) {
-              ws.userId = user.id;
-              ws.username = user.username;
-              connectedUsers.set(user.id, ws);
-              
-              console.log(`User ${user.username} authenticated via WebSocket`);
-              
-              // Broadcast updated online users list
-              broadcastOnlineUsers();
-            } else {
-              ws.close(1008, 'User not found');
-            }
-          } catch (error) {
-            console.error('WebSocket auth error:', error);
-            ws.close(1008, 'Invalid token');
-          }
-        }
-
-          // Typing indicator events: forward to recipient only (real-time, no persistence)
-          if (message.type === 'typing' || message.type === 'stop_typing') {
-            const payload = JSON.stringify({
-              type: message.type,
-              fromUserId: ws.userId,
-              toUserId: message.toUserId,
-            });
-
-            connectedUsers.forEach((client) => {
-              if (
-                client.readyState === WebSocket.OPEN &&
-                client.userId === message.toUserId
-              ) {
-                client.send(payload);
-              }
-            });
-          }
-      } catch (error) {
-        console.error('WebSocket message error:', error);
-      }
-    });
-
-    ws.on('close', () => {
-      if (ws.userId) {
-        connectedUsers.delete(ws.userId);
-        console.log(`User ${ws.username} disconnected`);
-        
-        // Broadcast updated online users list
-        broadcastOnlineUsers();
-      }
-    });
-
-    ws.on('error', (error) => {
-      console.error('WebSocket error:', error);
-    });
-  });
+  }
 
   return httpServer;
 }
