@@ -2,7 +2,7 @@
   "name": "talkochatapp-backend",
   "version": "1.0.0",
   "description": "Backend for Talko Chat App using Node.js, Express, PostgreSQL, WebSockets",
-  "main": "dist/index.js",
+  "main": "dist/server/index.js",
   "type": "commonjs",
   "scripts": {
     "build": "tsc",
