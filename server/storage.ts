@@ -1,5 +1,5 @@
 // Storage interface and implementation - referenced from javascript_database blueprint
-import { users, messages, type User, type InsertUser, type Message, type InsertMessage, type MessageWithSender } from "@shared/schema";
+import { users, messages, type User, type InsertUser, type Message, type InsertMessage, type MessageWithSender } from "../shared/schema";
 import { db } from "./db";
 import { eq, desc, or, and, isNull, ne } from "drizzle-orm";
 
