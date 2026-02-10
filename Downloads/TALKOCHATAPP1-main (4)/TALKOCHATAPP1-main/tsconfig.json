@@ -4,22 +4,10 @@
     "module": "CommonJS",
     "rootDir": ".",
     "outDir": "dist",
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["shared/*"]
-    },
     "esModuleInterop": true,
     "strict": false,
     "skipLibCheck": true
   },
-  "include": [
-    "server/**/*.ts",
-    "shared/**/*.ts"
-  ],
-  "exclude": [
-    "server/vite.ts",
-    "client",
-    "node_modules"
-  ]
+  "include": ["server/**/*.ts", "shared/**/*.ts"],
+  "exclude": ["client", "node_modules"]
 }
-
