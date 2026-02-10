@@ -4,7 +4,7 @@ import { WebSocketServer } from "ws";
 import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
-import { loginSchema, insertUserSchema } from "@shared/schema";
+import { loginSchema, insertUserSchema } from "../shared/schema";
 import type { User } from "../shared/schema";
 
 declare global {
