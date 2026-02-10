@@ -4,7 +4,7 @@ import pkg from 'pg';
 const { Pool } = pkg; // CommonJS interop for 'pg'
 
 import { drizzle } from 'drizzle-orm/node-postgres';
-import * as schema from '@shared/schema';
+import * as schema from '../shared/schema';
 
 // Check if the environment variable is set
 if (!process.env.DATABASE_URL) {
