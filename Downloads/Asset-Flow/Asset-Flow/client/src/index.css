@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Dancing+Script:wght@400;500;600;700&family=Montserrat:wght@300;400;500;600&family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Soft Romantic Palette */
+  --background: 340 100% 97%;   /* Soft pinkish white */
+  --foreground: 345 30% 25%;    /* Deep warm brownish/purple text */
+
+  --card: 0 0% 100%;
+  --card-foreground: 345 30% 25%;
+
+  --popover: 0 0% 100%;
+  --popover-foreground: 345 30% 25%;
+
+  --primary: 340 60% 65%;       /* Dusty Rose */
+  --primary-foreground: 340 100% 98%;
+
+  --secondary: 350 100% 92%;    /* Light Peach/Pink */
+  --secondary-foreground: 345 40% 30%;
+
+  --muted: 340 20% 96%;
+  --muted-foreground: 345 10% 50%;
+
+  --accent: 330 80% 90%;
+  --accent-foreground: 345 40% 30%;
+
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 98%;
+
+  --border: 340 30% 90%;
+  --input: 340 30% 90%;
+  --ring: 340 60% 65%;
+
+  --radius: 1rem;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Montserrat', sans-serif;
+    background-image: 
+      radial-gradient(at 0% 0%, hsla(340, 100%, 93%, 1) 0, transparent 50%), 
+      radial-gradient(at 50% 100%, hsla(350, 100%, 93%, 1) 0, transparent 50%),
+      radial-gradient(at 100% 0%, hsla(330, 100%, 94%, 1) 0, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  /* Full-screen faded background image: place `dolly.jpg` at public/images/dolly.jpg */
+  body {
+    position: relative;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background-image: url('/images/dolly.jpg.jpeg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    opacity: 0.28; /* faded */
+    filter: saturate(0.95) brightness(0.95);
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Playfair Display', serif;
+    @apply font-semibold tracking-tight;
+  }
+
+  .font-hand {
+    font-family: 'Dancing Script', cursive;
+  }
+}
+
+/* Custom Animations */
+@keyframes float {
+  0% { transform: translateY(0px); }
+  50% { transform: translateY(-10px); }
+  100% { transform: translateY(0px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.bloom-text {
+  background: linear-gradient(45deg, #ff9a9e 0%, #fad0c4 99%, #fad0c4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Typewriter cursor effect */
+.typewriter::after {
+  content: '|';
+  animation: blink 1s step-start infinite;
+}
+
+@keyframes blink {
+  50% { opacity: 0; }
+}
