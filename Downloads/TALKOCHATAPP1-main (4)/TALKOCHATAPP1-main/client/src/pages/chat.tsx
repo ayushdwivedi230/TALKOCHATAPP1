@@ -22,7 +22,7 @@ import { Avatar } from '@/components/Avatar';
 import { TypingIndicator } from '@/components/TypingIndicator';
 import { useTyping } from '@/hooks/use-typing';
 import { apiRequest, queryClient } from '@/lib/queryClient';
-import type { MessageWithSender, User } from '@shared/schema';
+import type { MessageWithSender, User } from '@shared/schema.client';
 import { formatDistanceToNow } from 'date-fns';
 
 export default function ChatPage() {

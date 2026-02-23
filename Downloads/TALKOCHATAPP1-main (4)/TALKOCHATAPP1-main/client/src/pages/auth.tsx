@@ -10,9 +10,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/lib/auth';
-import { loginSchema, insertUserSchema } from '@shared/schema';
+import { loginSchema, insertUserSchema } from '@shared/schema.client';
 import { apiRequest } from '@/lib/queryClient';
-import type { User } from '@shared/schema';
+import type { User } from '@shared/schema.client';
 import { z } from 'zod';
 
 type AuthMode = 'login' | 'signup';
