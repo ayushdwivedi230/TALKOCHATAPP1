@@ -5,7 +5,7 @@ import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import { loginSchema, insertUserSchema } from "../shared/schema";
-import type { User } from "@shared/schema";
+import type { User } from "../shared/schema";
 
 declare global {
   namespace Express {
