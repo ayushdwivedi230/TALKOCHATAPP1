@@ -3,6 +3,7 @@ import express from "express";
 import cors from "cors";
 import type { Request } from "express";
 import { registerRoutes } from "./routes";
+import path from "path";
 
 /* ------------------ Logger ------------------ */
 function log(message: string, source = "express") {
@@ -37,12 +38,34 @@ app.use(
 
 app.use(cors());
 
-/* ------------------ Routes ------------------ */
-registerRoutes(app);
+/* ------------------ Serve UI ------------------ */
+app.use(express.static(path.join(__dirname, "../client/dist")));
+
+/* ------------------ API Routes ------------------ */
+
+/* ------------------ SPA Fallback ------------------ */
+app.get("*", (_req, res) => {
+  res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+});
 
 /* ------------------ Start Server ------------------ */
 const PORT = Number(process.env.PORT) || 10000;
 
-app.listen(PORT, "0.0.0.0", () => {
-  log(`Server running on port ${PORT}`);
-});
+/* ------------------ API Routes + WebSocket Server ------------------ */
+// registerRoutes returns an http.Server with WebSocket handling attached.
+
+const PORT = Number(process.env.PORT) || 10000;
+
+async function start() {
+  try {
+    const httpServer = await registerRoutes(app);
+    httpServer.listen(PORT, "0.0.0.0", () => {
+      log(`Server running on port ${PORT}`);
+    });
+  } catch (err) {
+    console.error("Failed to start server:", err);
+    process.exit(1);
+  }
+}
+
+start();
