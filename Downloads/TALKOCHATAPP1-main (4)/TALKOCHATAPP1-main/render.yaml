@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: talkochat-backend
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    rootDir: .
+    envVars:
+      - key: NODE_ENV
+        value: production
+  - type: static
+    name: talkochat-frontend
+    env: static
+    plan: starter
+    buildCommand: cd client && npm install && npm run build
+    publishPath: client/dist
