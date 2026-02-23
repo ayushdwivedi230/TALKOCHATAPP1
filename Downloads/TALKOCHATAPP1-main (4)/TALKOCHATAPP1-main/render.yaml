@@ -9,6 +9,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: DATABASE_URL
+        value: ""
+      - key: JWT_SECRET
+        value: ""
   - type: static
     name: talkochat-frontend
     env: static

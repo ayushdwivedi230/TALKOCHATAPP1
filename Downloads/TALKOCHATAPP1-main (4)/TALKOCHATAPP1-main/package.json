@@ -5,8 +5,11 @@
   "main": "dist/index.js",
   "type": "commonjs",
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:all",
     "start": "node dist/server/index.js",
+    "build:client": "cd client && npm install && npm run build",
+    "build:server": "npm run build",
+    "build:all": "npm run build:server && npm run build:client",
     "dev": "ts-node -r tsconfig-paths/register server/index.ts"
   },
   "dependencies": {
