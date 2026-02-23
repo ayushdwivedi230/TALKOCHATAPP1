@@ -37,20 +37,6 @@ app.use(
 );
 
 app.use(cors());
-
-/* ------------------ Serve UI ------------------ */
-app.use(express.static(path.join(__dirname, "../client/dist")));
-
-/* ------------------ API Routes ------------------ */
-
-/* ------------------ SPA Fallback ------------------ */
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(__dirname, "../client/dist/index.html"));
-});
-
-/* ------------------ Start Server ------------------ */
-const PORT = Number(process.env.PORT) || 10000;
-
 /* ------------------ API Routes + WebSocket Server ------------------ */
 // registerRoutes returns an http.Server with WebSocket handling attached.
 
