@@ -21,7 +21,7 @@ export const pool = new Pool(
   process.env.DATABASE_URL
     ? { 
         connectionString: process.env.DATABASE_URL,
-        ssl: process.env.DATABASE_URL.includes('neon.tech') ? { rejectUnauthorized: false } : false
+        ssl: { rejectUnauthorized: false } 
       }
     : {
         user: String(process.env.DB_USER || 'postgres'),
