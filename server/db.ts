@@ -19,7 +19,10 @@ console.log(`[Database] Connecting to: ${process.env.DATABASE_URL.split('@')[1] 
 // Prioritize DATABASE_URL if available, otherwise use individual components
 export const pool = new Pool(
   process.env.DATABASE_URL
-    ? { connectionString: process.env.DATABASE_URL }
+    ? { 
+        connectionString: process.env.DATABASE_URL,
+        ssl: process.env.DATABASE_URL.includes('neon.tech') ? { rejectUnauthorized: false } : false
+      }
     : {
         user: String(process.env.DB_USER || 'postgres'),
         password: String(process.env.DB_PASSWORD || '1234'),
